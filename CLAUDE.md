@@ -27,7 +27,7 @@ An open-source tool combining LLM intelligence + static analysis to produce inte
 ## Agent Pipeline
 - Agents write intermediate results to the data directory's `intermediate/` subdirectory on disk (not returned to context) — `.ua/intermediate/`, or `.understand-anything/intermediate/` when that legacy directory is present
 - Agent model field is omitted from frontmatter so each platform falls back to its configured default — `inherit` was a Claude Code-only keyword that opencode (and similar tools) treated as a literal model id and rejected with `ProviderModelNotFoundError` (see #167)
-- `/understand` auto-triggers `/understand-dashboard` after completion
+- After completion `/understand` launches the dashboard by **reading `$PLUGIN_ROOT/skills/understand-dashboard/SKILL.md` and executing its instructions** — not by invoking the skill. All skills carry `disable-model-invocation: true` (Codex: `agents/openai.yaml` → `policy.allow_implicit_invocation: false`), so a skill invocation would not fire. Reading by path also behaves identically on platforms whose skill-invocation semantics differ from Claude's.
 - Intermediate files cleaned up after graph assembly
 
 ## Key Commands
@@ -70,33 +70,29 @@ Note: `.claude-plugin/marketplace.json` does **not** carry a version — the `pl
 
 ## Testing Local Plugin Changes
 
-Claude Code caches installed plugins at `~/.claude/plugins/cache/understand-anything/understand-anything/<version>/`. Symlinks don't work because Claude's Search/Glob tools can't follow them. To test local changes:
+This fork is installed by **linking**, not by copying, so edits to this checkout are live everywhere at once. Each platform's skill root holds links back into this working tree:
 
-1. **Build the packages:**
+| Platform | Link target | Gets |
+|---|---|---|
+| Claude Code | `~/.claude/skills/understand-anything` → `understand-anything-plugin/` | skills + agents + hooks |
+| Codex | `~/.codex/skills/understand*` → `skills/<name>/` (per skill) | skills |
+| Antigravity | `~/.gemini/config/skills/understand*` → `skills/<name>/` (per skill) | skills |
+| all | `~/.understand-anything-plugin` → `understand-anything-plugin/` | `$PLUGIN_ROOT` fallback (§ Phase 0) |
+
+To test a local change:
+
+1. **Edit the source in this checkout.** SKILL.md / agent / hook edits need no build step.
+2. **Rebuild only if TypeScript changed:**
    ```bash
    pnpm --filter @understand-anything/core build
    pnpm --filter @understand-anything/skill build
    ```
+3. **Start a fresh session** — existing sessions hold the old prompts in context.
+4. **Run `/understand --full`** in the target project to verify.
 
-2. **Find the installed version** (must match what the marketplace currently serves):
-   ```bash
-   ls ~/.claude/plugins/cache/understand-anything/understand-anything/
-   ```
+**Notes on linking:**
+- Use **symlinks**, not junctions. Antigravity's skill scanner skips junctions but follows symlinks; Claude Code and Codex accept either. On Windows, creating a symlink requires Developer Mode (Settings → System → For developers) or an elevated shell.
+- Do **not** hard-link the skill files. Hard links resolve to their own location, which breaks the `PLUGIN_ROOT = dirname(__filename)/../..` derivation in the bundled `.mjs` scripts; symlinks resolve through to this checkout, so the derivation stays correct.
+- Do **not** install this fork through the Claude Code marketplace. `/plugin install` copies the payload into `~/.claude/plugins/cache/`, which reintroduces a second copy and (on Windows without Developer Mode) fails while recreating the pnpm workspace symlinks.
 
-3. **Copy your local plugin into the cache**, replacing `<VERSION>` with the version from step 2:
-   ```bash
-   rm -rf ~/.claude/plugins/cache/understand-anything/understand-anything/<VERSION>
-   cp -R ./understand-anything-plugin ~/.claude/plugins/cache/understand-anything/understand-anything/<VERSION>
-   ```
-
-4. **Start a fresh Claude Code session** (existing sessions cache the old prompts in context).
-
-5. **Run `/understand --full`** in the target project to verify.
-
-**Re-sync after further changes:**
-```bash
-pnpm --filter @understand-anything/core build && \
-cp -R ./understand-anything-plugin/* ~/.claude/plugins/cache/understand-anything/understand-anything/<VERSION>/
-```
-
-**To revert to upstream:** Uninstall and reinstall the plugin from the marketplace — it repopulates the cache from the upstream repo.
+**To revert to upstream:** point the `origin` remote back at the upstream repository and reset, or remove the links above and install the published plugin from the marketplace.
