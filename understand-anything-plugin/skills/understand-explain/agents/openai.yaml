@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Explain"
+  short_description: "Deep-dive explanation of a file, function, or module"
+
+policy:
+  allow_implicit_invocation: false

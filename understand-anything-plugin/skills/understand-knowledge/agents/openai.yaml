@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Knowledge"
+  short_description: "Analyze an LLM wiki knowledge base into a knowledge graph"
+
+policy:
+  allow_implicit_invocation: false

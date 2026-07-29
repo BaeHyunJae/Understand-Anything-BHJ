@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Figma"
+  short_description: "Analyze a Figma file into a design knowledge graph"
+
+policy:
+  allow_implicit_invocation: false

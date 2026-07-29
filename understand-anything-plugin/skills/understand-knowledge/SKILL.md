@@ -2,6 +2,7 @@
 name: understand-knowledge
 description: Analyze a Karpathy-pattern LLM wiki knowledge base and generate an interactive knowledge graph with entity extraction, implicit relationships, and topic clustering.
 argument-hint: "[wiki-directory]"
+disable-model-invocation: true
 ---
 
 # /understand-knowledge

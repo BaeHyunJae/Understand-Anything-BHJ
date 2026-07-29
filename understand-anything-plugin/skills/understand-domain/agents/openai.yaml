@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Domain"
+  short_description: "Extract business domain knowledge into a domain flow graph"
+
+policy:
+  allow_implicit_invocation: false

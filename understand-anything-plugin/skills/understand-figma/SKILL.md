@@ -2,6 +2,7 @@
 name: understand-figma
 description: Analyze a Figma file via the Figma REST API and generate an interactive design knowledge graph (pages, screens, components, component sets, instances, design tokens) with a kind:"design" dashboard.
 argument-hint: "<figma-file-url-or-key> [--language <lang>]"
+disable-model-invocation: true
 ---
 
 # /understand-figma

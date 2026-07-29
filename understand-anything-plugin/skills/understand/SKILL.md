@@ -2,6 +2,7 @@
 name: understand
 description: Analyze a codebase to produce an interactive knowledge graph for understanding architecture, components, and relationships
 argument-hint: ["[path] [--full|--auto-update|--no-auto-update|--review|--language <lang>|--exclude <patterns>]"]
+disable-model-invocation: true
 ---
 
 # /understand
@@ -806,7 +807,8 @@ Report to the user: `[Phase 7/7] Saving knowledge graph...`
    - Any warnings from the reviewer
    - Path to the output file: `$UA_DIR/knowledge-graph.json`
 
-6. Only automatically launch the dashboard by invoking the `/understand-dashboard` skill if final graph validation passed after normalization/review fixes.
+6. Only automatically launch the dashboard if final graph validation passed after normalization/review fixes.
+   To launch it, read `$PLUGIN_ROOT/skills/understand-dashboard/SKILL.md` and execute its instructions. Do **not** invoke `/understand-dashboard` as a skill — it is user-invoked only, so a skill invocation would not fire.
    If final validation did not pass, report that the graph was saved with warnings and dashboard launch was skipped.
 
 ---

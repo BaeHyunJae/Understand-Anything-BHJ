@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Chat"
+  short_description: "Answer questions about a codebase from its knowledge graph"
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Onboard"
+  short_description: "Generate an onboarding guide for new team members"
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand"
+  short_description: "Analyze a codebase into an interactive knowledge graph"
+
+policy:
+  allow_implicit_invocation: false

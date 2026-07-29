@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Diff"
+  short_description: "Analyze a git diff or pull request for impact and risk"
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Understand Dashboard"
+  short_description: "Launch the interactive knowledge-graph dashboard"
+
+policy:
+  allow_implicit_invocation: false
