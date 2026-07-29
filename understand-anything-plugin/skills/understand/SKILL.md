@@ -12,8 +12,8 @@ Analyze the current codebase and produce a `knowledge-graph.json` file in the pr
 
 - `$ARGUMENTS` may contain:
   - `--full` — Force a full rebuild, ignoring any existing graph
-  - `--auto-update` — Enable automatic graph updates on commit (writes `autoUpdate: true` to `$UA_DIR/config.json`)
-  - `--no-auto-update` — Disable automatic graph updates (writes `autoUpdate: false` to `$UA_DIR/config.json`)
+  - `--auto-update` — Enable automatic graph updates on commit (merges `autoUpdate: true` into `$UA_DIR/config.json`)
+  - `--no-auto-update` — Disable automatic graph updates (merges `autoUpdate: false` into `$UA_DIR/config.json`)
   - `--review` — Run full LLM graph-reviewer instead of inline deterministic validation
   - `--language <lang>` — Generate all textual content (summaries, descriptions, tags, titles, languageNotes, languageLesson) in the specified language. Accepts ISO 639-1 codes (`zh`, `ja`, `ko`, `en`, `es`, `fr`, `de`, etc.) or friendly names (`chinese`, `japanese`, `korean`, `english`, `spanish`, etc.). Locale variants supported: `zh-TW`, `zh-HK`, etc. Defaults to `en` (English). Stores preference in `$UA_DIR/config.json` for consistency across incremental updates.
   - `--exclude <patterns>` — Comma-separated glob patterns for additional files/directories to exclude from analysis (e.g., `--exclude "tests/*,docs/*"`). These patterns take highest priority over built-in defaults and `.understandignore` rules. Supports gitignore syntax including `!` negation.
@@ -141,8 +141,14 @@ Determine whether to run a full analysis or incremental update.
    find "$UA_DIR/" -maxdepth 1 -type d -name '.trash-*' -mtime +7 -exec rm -rf {} + 2>/dev/null || true
    ```
 3.5. **Auto-update configuration:**
-    - If `--auto-update` is in `$ARGUMENTS`: write `{"autoUpdate": true}` to `$UA_DIR/config.json`
-    - If `--no-auto-update` is in `$ARGUMENTS`: write `{"autoUpdate": false}` to `$UA_DIR/config.json`
+    - **Every write to `$UA_DIR/config.json` merges into the existing file — never replaces it.** The file holds independent preferences (`autoUpdate`, `outputLanguage`, …) set by different steps and by earlier runs, so a whole-file write silently drops the others. Define this helper once and use it for every config write in this phase:
+      ```bash
+      ua_config_set() {
+        node -e 'const fs=require("fs");const [p,patch]=process.argv.slice(1);let o={};try{o=JSON.parse(fs.readFileSync(p,"utf8"))}catch{}Object.assign(o,JSON.parse(patch));fs.writeFileSync(p,JSON.stringify(o,null,2)+"\n")' "$UA_DIR/config.json" "$1"
+      }
+      ```
+    - If `--auto-update` is in `$ARGUMENTS`: `ua_config_set '{"autoUpdate": true}'`
+    - If `--no-auto-update` is in `$ARGUMENTS`: `ua_config_set '{"autoUpdate": false}'`
     - These flags only set the config — analysis proceeds normally regardless.
 
  3.6. **Language configuration:**
@@ -154,9 +160,9 @@ Determine whether to run a full analysis or incremental update.
       - **Stored preference wins.** If `$UA_DIR/config.json` has an `outputLanguage` field, set `$OUTPUT_LANGUAGE` to it and skip the rest.
       - **Otherwise detect (first run only).** Infer the predominant language of the user's conversation as an ISO 639-1 code (`$DETECTED_LANG`). If it is `en` or cannot be confidently determined, set `$OUTPUT_LANGUAGE=en` and proceed silently — no prompt (English users see no change).
       - **If `$DETECTED_LANG` ≠ `en`, confirm once before analyzing:** tell the user you detected `<language>` and ask whether to generate all content in it; they press Enter/"yes" to accept, or type another language code/name to override (normalize via the friendly-name map above). If running non-interactively (no reply possible), skip the wait, use `$DETECTED_LANG`, and print a one-line notice instead of blocking.
-      - **Persist** the resolved `$OUTPUT_LANGUAGE` (including `en`) into `config.json` so it never re-prompts for this project.
+      - **Persist** the resolved `$OUTPUT_LANGUAGE` (including `en`) so it never re-prompts for this project: `ua_config_set "{\"outputLanguage\": \"$OUTPUT_LANGUAGE\"}"` (the merging helper from 3.5 — a whole-file write here would drop `autoUpdate`).
     - If `--language` IS specified:
-      - Update `$UA_DIR/config.json` with the new language: merge `{"outputLanguage": "<lang>"}` into existing config.
+      - Persist the new language with the same helper: `ua_config_set "{\"outputLanguage\": \"$OUTPUT_LANGUAGE\"}"`.
       - Store as `$OUTPUT_LANGUAGE` for use throughout all phases.
     - **Language directive template:** Store as `$LANGUAGE_DIRECTIVE`:
       ```markdown
