@@ -32,22 +32,16 @@ The knowledge graph JSON has this structure:
 
 ## Instructions
 
-1. **Resolve the data directory `$UA_DIR`.** Run `UA_DIR=$([ -d .understand-anything ] && echo .understand-anything || echo .ua)` — this is the legacy `.understand-anything/` when it already exists, otherwise the new `.ua/`. Check that `$UA_DIR/knowledge-graph.json` exists. If not, tell the user to run `/understand` first.
+1. **Resolve context.** Run the context helper. `<plugin-root>` is the first of these that exists: the value of the runtime's `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` variable, `~/.understand-anything-plugin`, `~/.claude/skills/understand-anything`, `~/.gemini/config/plugins/understand-anything`.
+   ```
+   node "<plugin-root>/scripts/ua-context.mjs" --freshness
+   ```
+   It prints `KEY=VALUE` lines: `PLUGIN_ROOT`, `PROJECT_ROOT`, `UA_DIR`, `GRAPH_EXISTS`, and the freshness fields below. Substitute the printed absolute paths literally into every later command instead of re-deriving them — the shells this skill runs under do not share POSIX test and substitution syntax. If `GRAPH_EXISTS=false`, stop and tell the user to run the "understand" skill first.
 
-2. **Check graph freshness before using graph-derived context**:
-   - Read `project.gitCommitHash` from the graph metadata as `GRAPH_COMMIT_RAW`. Resolve it as a commit before using it in any Git diff, then compare it with `git rev-parse HEAD` and inspect project-scoped committed and working-tree changes from the project root:
-     ```bash
-     GRAPH_COMMIT=$(git rev-parse --verify --end-of-options "${GRAPH_COMMIT_RAW}^{commit}" 2>/dev/null)
-     git rev-parse HEAD
-     git diff --name-only "$GRAPH_COMMIT" HEAD -- .
-     git diff --cached --name-only -- .
-     git diff --name-only -- .
-     git ls-files --others --exclude-standard -- .
-     ```
-   - The `-- .` pathspec is required: commits that only touch a sibling monorepo project must not make this graph stale. A hash mismatch alone is not stale when the project diff is empty.
-   - Ignore the selected data directory (`.ua/` or legacy `.understand-anything/`) in every command's output because it contains generated graph artifacts, not project source drift.
-   - If the committed diff or any working-tree command reports project files, warn before explaining that graph-derived context may omit those changes. Suggest: Run `/understand` to refresh the graph.
-   - Run the commit diff only when `GRAPH_COMMIT_RAW` resolves successfully. If the graph commit or Git metadata is missing, invalid, or unavailable, give a brief best-effort warning and continue instead of blocking.
+2. **Check graph freshness before using graph-derived context.** The helper already compared the graph's recorded commit against `HEAD` and inspected committed and working-tree changes, scoped to this project so that a commit touching only a sibling monorepo project does not count, and ignoring the data directory's own generated artifacts. Act on what it printed:
+   - `STALE=true` — warn before explaining that graph-derived context may omit those changes. Suggest: run the "understand" skill to refresh the graph. The changed files are listed as `CHANGED=` lines.
+   - `GRAPH_COMMIT_RESOLVED=false` — the recorded commit is missing or no longer resolvable. Give a brief best-effort warning and continue; do not block.
+   - A hash mismatch alone is not stale. `STALE` is false when the project diff is empty.
 
 3. **Find the target node** — use Grep to search the knowledge graph for the component: "$ARGUMENTS"
    - For file paths (e.g., `src/auth/login.ts`): search for `"filePath"` matches

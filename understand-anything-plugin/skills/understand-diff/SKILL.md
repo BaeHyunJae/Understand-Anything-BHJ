@@ -31,27 +31,21 @@ The knowledge graph JSON has this structure:
 
 ## Instructions
 
-1. **Resolve the data directory `$UA_DIR`.** Run `UA_DIR=$([ -d .understand-anything ] && echo .understand-anything || echo .ua)` — this is the legacy `.understand-anything/` when it already exists, otherwise the new `.ua/`. Check that `$UA_DIR/knowledge-graph.json` exists. If not, tell the user to run `/understand` first.
+1. **Resolve context.** Run the context helper. `<plugin-root>` is the first of these that exists: the value of the runtime's `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` variable, `~/.understand-anything-plugin`, `~/.claude/skills/understand-anything`, `~/.gemini/config/plugins/understand-anything`.
+   ```
+   node "<plugin-root>/scripts/ua-context.mjs" --freshness
+   ```
+   It prints `KEY=VALUE` lines: `PLUGIN_ROOT`, `PROJECT_ROOT`, `UA_DIR`, `GRAPH_EXISTS`, and the freshness fields used in step 3. Substitute the printed absolute paths literally into every later command instead of re-deriving them — the shells this skill runs under do not share POSIX test and substitution syntax. If `GRAPH_EXISTS=false`, stop and tell the user to run the "understand" skill first.
 
 2. **Get the changed files list** (do NOT read the graph yet):
    - If on a branch with uncommitted changes: `git diff --name-only`
    - If on a feature branch: `git diff main...HEAD --name-only` (or the base branch)
    - If the user specifies a PR number: get the diff from that PR
 
-3. **Read project metadata and check graph freshness** — use Grep or Read with a line limit to extract the `"project"` section, including `gitCommitHash` as `GRAPH_COMMIT_RAW`, then:
-   - Resolve it as a commit before using it in any Git diff. From the project root, compare the resolved commit with `git rev-parse HEAD` and inspect project-scoped committed and working-tree changes:
-     ```bash
-     GRAPH_COMMIT=$(git rev-parse --verify --end-of-options "${GRAPH_COMMIT_RAW}^{commit}" 2>/dev/null)
-     git rev-parse HEAD
-     git diff --name-only "$GRAPH_COMMIT" HEAD -- .
-     git diff --cached --name-only -- .
-     git diff --name-only -- .
-     git ls-files --others --exclude-standard -- .
-     ```
-   - The `-- .` pathspec is required: commits that only touch a sibling monorepo project must not make this graph stale. A hash mismatch alone is not stale when the project diff is empty.
-   - Ignore the selected data directory (`.ua/` or legacy `.understand-anything/`) in every command's output because it contains generated graph artifacts, not project source drift.
-   - If the committed diff or any working-tree command reports project files, warn before impact analysis that the graph may omit those changes. Suggest: Run `/understand` to refresh the graph.
-   - Run the commit diff only when `GRAPH_COMMIT_RAW` resolves successfully. If the graph commit or Git metadata is missing, invalid, or unavailable, give a brief best-effort warning and continue instead of blocking.
+3. **Read project metadata and act on graph freshness** — use Grep or Read with a line limit to extract the `"project"` section for context. The freshness comparison is already done: step 1's helper compared the graph's recorded commit against `HEAD` and inspected committed and working-tree changes, scoped to this project so that a commit touching only a sibling monorepo project does not count, and ignoring the data directory's own generated artifacts. Act on what it printed:
+   - `STALE=true` — warn before impact analysis that the graph may omit those changes. Suggest: run the "understand" skill to refresh the graph. The changed files are listed as `CHANGED=` lines.
+   - `GRAPH_COMMIT_RESOLVED=false` — the recorded commit is missing or no longer resolvable. Give a brief best-effort warning and continue; do not block.
+   - A hash mismatch alone is not stale. `STALE` is false when the project diff is empty.
 
 4. **Find nodes for changed files** — for each changed file path, use Grep to search the knowledge graph for:
    - Nodes with matching `"filePath"` values (e.g., `grep "changed/file/path"`)
@@ -72,7 +66,7 @@ The knowledge graph JSON has this structure:
    - **Risk Assessment**: Based on node `complexity` values, number of cross-layer edges, and blast radius (number of affected components)
    - Suggest what to review carefully and any potential issues
 
-8. **Write diff overlay for dashboard** — after producing the analysis, write the diff data to `$UA_DIR/diff-overlay.json` so the dashboard can visualize changed and affected components. The file contains:
+8. **Write diff overlay for dashboard** — after producing the analysis, write the diff data to `<UA_DIR>/diff-overlay.json` so the dashboard can visualize changed and affected components. The file contains:
    ```json
    {
      "version": "1.0.0",
@@ -83,4 +77,4 @@ The knowledge graph JSON has this structure:
      "affectedNodeIds": ["<node IDs from step 5, excluding changedNodeIds>"]
    }
    ```
-   After writing, tell the user they can run `/understand-anything:understand-dashboard` to see the diff overlay visually.
+   After writing, tell the user they can run the "understand-dashboard" skill to see the diff overlay visually.
