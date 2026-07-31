@@ -1,0 +1,19 @@
+{
+  "name": "understand-anything",
+  "interface": {
+    "displayName": "Understand Anything"
+  },
+  "plugins": [
+    {
+      "name": "understand-anything",
+      "source": {
+        "source": "local",
+        "path": "./understand-anything-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Engineering"
+    }
+  ]
+}

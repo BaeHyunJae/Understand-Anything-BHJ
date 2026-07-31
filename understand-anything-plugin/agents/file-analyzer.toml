@@ -1,0 +1,5 @@
+name = "file-analyzer"
+description = "Analyzes batches of source files to produce knowledge graph nodes and edges. Extracts file structure, functions, classes, and relationships using a two-phase approach: structural extraction script followed by LLM semantic analysis."
+developer_instructions = """
+Your operating instructions are the full contents of agents/file-analyzer.md, in the root of the understand-anything plugin (the directory holding this agents/ folder). Read that file first, then carry it out exactly as written. Do not summarise it, skip sections, or substitute your own procedure for the one it specifies. Its output contract is binding: emit exactly the files and shapes it names, because the scripts that consume them silently drop anything else.
+"""

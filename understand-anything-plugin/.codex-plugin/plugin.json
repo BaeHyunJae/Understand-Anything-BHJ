@@ -8,7 +8,7 @@
   "homepage": "https://github.com/Egonex-AI/Understand-Anything",
   "repository": "https://github.com/Egonex-AI/Understand-Anything",
   "license": "MIT",
-  "hooks": "./hooks/claude-hooks.json",
+  "hooks": "./hooks/codex-hooks.json",
   "keywords": [
     "codebase-analysis",
     "knowledge-graph",

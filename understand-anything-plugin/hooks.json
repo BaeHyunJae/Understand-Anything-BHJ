@@ -1,0 +1,16 @@
+{
+  "understand-anything-graph-staleness": {
+    "enabled": true,
+    "PreInvocation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "%USERPROFILE%\\.understand-anything-plugin\\hooks\\ua-antigravity-hook.cmd",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

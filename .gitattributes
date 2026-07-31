@@ -1,0 +1,4 @@
+# cmd.exe misparses a batch file with LF-only line endings, so the hook wrappers
+# must arrive with CRLF on every checkout.
+*.cmd text eol=crlf
+*.bat text eol=crlf

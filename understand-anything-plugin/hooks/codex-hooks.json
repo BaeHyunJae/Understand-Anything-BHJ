@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$PLUGIN_ROOT/hooks/ua-graph-staleness.ps1\" -Format codex",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\hooks\\ua-graph-staleness.ps1\" -Format codex",
+            "timeout": 20,
+            "statusMessage": "Checking knowledge graph freshness"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^shell_command$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$PLUGIN_ROOT/hooks/ua-graph-staleness.ps1\" -Format codex",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\hooks\\ua-graph-staleness.ps1\" -Format codex",
+            "timeout": 20,
+            "statusMessage": "Checking knowledge graph freshness"
+          }
+        ]
+      }
+    ]
+  }
+}
