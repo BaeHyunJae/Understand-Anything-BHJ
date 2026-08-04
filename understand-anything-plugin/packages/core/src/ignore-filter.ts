@@ -8,6 +8,13 @@ import { resolveUaDir } from "./persistence/index.js";
  * exclusion rules, plus bin/obj for .NET projects.
  */
 export const DEFAULT_IGNORE_PATTERNS: string[] = [
+  // This tool's own data directory. Without these the scanner analyzes its own
+  // output — config.json, .understandignore and the graph itself become nodes —
+  // and every run's inventory grows by what the previous run wrote. Staleness
+  // detection already excludes them (see staleness.ts); scanning must agree.
+  ".ua/",
+  ".understand-anything/",
+
   // Dependency directories
   "node_modules/",
   ".git/",

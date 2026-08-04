@@ -40,6 +40,11 @@ describe("IgnoreFilter", () => {
       expect(DEFAULT_IGNORE_PATTERNS).toContain("out/");
       expect(DEFAULT_IGNORE_PATTERNS).toContain("coverage/");
     });
+
+    it("contains this tool's own data directories", () => {
+      expect(DEFAULT_IGNORE_PATTERNS).toContain(".ua/");
+      expect(DEFAULT_IGNORE_PATTERNS).toContain(".understand-anything/");
+    });
   });
 
   describe("createIgnoreFilter with no user file", () => {
@@ -49,6 +54,9 @@ describe("IgnoreFilter", () => {
       expect(filter.isIgnored("dist/index.js")).toBe(true);
       expect(filter.isIgnored(".git/config")).toBe(true);
       expect(filter.isIgnored("obj/Release/net8.0/app.dll")).toBe(true);
+      expect(filter.isIgnored(".ua/config.json")).toBe(true);
+      expect(filter.isIgnored(".ua/intermediate/batch-1.json")).toBe(true);
+      expect(filter.isIgnored(".understand-anything/knowledge-graph.json")).toBe(true);
     });
 
     it("does not ignore source files", () => {
