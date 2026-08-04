@@ -82,4 +82,4 @@ The knowledge graph JSON has this structure:
      "affectedNodeIds": ["<node IDs from step 5, excluding changedNodeIds>"]
    }
    ```
-   After writing, tell the user they can run `/understand-anything:understand-dashboard` to see the diff overlay visually.
+   After writing, tell the user they can run `/understand-dashboard` to see the diff overlay visually.
