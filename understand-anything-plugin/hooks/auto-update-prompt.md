@@ -27,16 +27,22 @@ Incrementally update the knowledge graph using deterministic structural fingerpr
    ```bash
    git diff "<lastCommitHash>..HEAD" --name-only
    ```
-   If no files changed: update `meta.json` with the new commit hash and **STOP**.
+   Check the exit status before reading the output. A non-zero exit means `<lastCommitHash>` is not reachable from `HEAD` — a rebase, an amended or force-pushed history, a shallow clone, or a graph copied from another checkout. That case also produces empty output, so reading the output alone cannot tell it apart from "nothing changed".
+   - Non-zero exit: report "Stored commit `<lastCommitHash>` is not reachable from HEAD, so changes cannot be computed. Run `/understand` to re-baseline." and **STOP**. Do **not** write `meta.json` — stamping the current hash would mark an arbitrarily stale graph as fresh, and every later run would then report it up to date.
+   - Exit 0 with no files changed: update `meta.json` with the new commit hash and **STOP**.
 
 7. Before filtering by extension, remove every path under the selected `$UA_DIR` from the changed-file list. The selected data directory (`.ua/` or legacy `.understand-anything/`) contains generated graph artefacts, not project source changes. Do **not** update `meta.json` merely because files in this directory changed. If no paths remain after removing `$UA_DIR`, report "Only generated graph artefacts changed. The graph baseline remains associated with the analysed source commit." and **STOP** without writing `meta.json`.
 
 8. Filter the remaining paths to source files only (`.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.go`, `.rs`, `.java`, `.rb`, `.cpp`, `.c`, `.h`, `.cs`, `.swift`, `.kt`, `.php`).
    If no source files changed: update `meta.json` with the new commit hash, report "Only non-source files changed. Metadata updated." and **STOP**.
 
-9. Create intermediate directory:
+9. Create the scratch directories, then purge stale trash:
    ```bash
    mkdir -p "$UA_DIR/intermediate"
+   # Phase 3 cleanup `mv`s scratch dirs into `.trash-<timestamp>/` rather than
+   # `rm -rf`ing them directly (see issue #301). Reclaim the space here once the
+   # trash is older than 7 days, the same way `/understand` Phase 0 does.
+   find "$UA_DIR/" -maxdepth 1 -type d -name '.trash-*' -mtime +7 -exec rm -rf {} + 2>/dev/null || true
    ```
 
 10. **Apply `.understandignore` exclusions** (same semantics as `/understand` Step 2.5 in `agents/project-scanner.md`).
@@ -103,7 +109,9 @@ This phase runs a deterministic Node.js script that compares file structures aga
 
 ```javascript
 // The script should:
-// 1. Read fingerprints.json from the data directory (.ua/fingerprints.json, or .understand-anything/fingerprints.json when that legacy directory is present — resolve UA_DIR the same way as the other scripts)
+// 1. Read fingerprints.json from the data directory (.ua/fingerprints.json, or .understand-anything/fingerprints.json when that legacy directory is present — resolve UA_DIR the same way as the other scripts).
+//    The per-file fingerprints are under the `files` key, alongside `version`,
+//    `gitCommitHash` and `generatedAt`. The store is NOT a flat path→fingerprint map.
 // 2. For each changed source file:
 //    a. Read the file content
 //    b. Compute SHA-256 content hash
@@ -234,19 +242,11 @@ Perform lightweight validation (no graph-reviewer agent):
 
 1. Write the final knowledge graph to `$UA_DIR/knowledge-graph.json`.
 
-2. Write updated metadata to `$UA_DIR/meta.json`:
-   ```json
-   {
-     "lastAnalyzedAt": "<ISO 8601 timestamp>",
-     "gitCommitHash": "<current commit hash>",
-     "version": "1.0.0",
-     "analyzedFiles": <total file count in graph>
-   }
-   ```
+2. **Update fingerprints (LOAD-PATCH-SAVE, not OVERWRITE).**
 
-3. **Update fingerprints (LOAD-PATCH-SAVE, not OVERWRITE).**
+   The most common failure mode here: writing only the freshly-computed batch entries to `fingerprints.json`, discarding every other file's fingerprint. The next auto-update then sees all those files as new (no stored fingerprint), classifies them as STRUCTURAL, and escalates to FULL_UPDATE permanently (issue #152). The script must LOAD ALL existing entries, PATCH only the re-analyzed ones, and SAVE the full store back.
 
-   The most common failure mode here: writing only the freshly-computed batch entries to `fingerprints.json`, discarding every other file's fingerprint. The next auto-update then sees all those files as new (no stored fingerprint), classifies them as STRUCTURAL, and escalates to FULL_UPDATE permanently (issue #152). The script must LOAD ALL existing entries, PATCH only the re-analyzed ones, and SAVE the full dict back.
+   **The store is not a flat map.** `/understand` Phase 7 writes `{ version, gitCommitHash, generatedAt, files }`, and the per-file fingerprints live under `files`. Patching the top level instead writes path keys beside `version` and leaves the real `files` map untouched — the graph then never sees an updated fingerprint, and the guard below cannot fire because the top level is never empty.
 
    Write and execute a Node.js script in this exact ordering:
 
@@ -259,10 +259,14 @@ Perform lightweight validation (no graph-reviewer agent):
    const fpPath = path.join(PROJECT_ROOT, UA_DIR, 'fingerprints.json');
    const existedAndNonEmpty = existsSync(fpPath) && readFileSync(fpPath, 'utf-8').trim().length > 0;
 
-   // 1. LOAD ALL existing entries (NEVER skip — preserves un-analyzed files)
-   const all = existedAndNonEmpty
+   // 1. LOAD the whole store, then take the `files` map out of it. The sibling
+   //    fields must survive the write, so keep the store itself around.
+   //    (NEVER skip the load — it is what preserves un-analyzed files.)
+   const store = existedAndNonEmpty
      ? JSON.parse(readFileSync(fpPath, 'utf-8'))
-     : {};
+     : { version: '1.0.0', gitCommitHash: '', generatedAt: '', files: {} };
+   if (!store.files) store.files = {};
+   const all = store.files;
    const before = Object.keys(all).length;
 
    // 2. PATCH (file still exists) or REMOVE (file deleted) for each re-analyzed path.
@@ -277,29 +281,66 @@ Perform lightweight validation (no graph-reviewer agent):
      const content = readFileSync(fullPath, 'utf-8');
      const contentHash = createHash('sha256').update(content).digest('hex');
      // Extract functions, classes, imports, exports via the same regex as Phase 1.
-     all[filePath] = { contentHash, functions, classes, imports, exports };
+     // Write the shape core's `FileFingerprint` declares — a partial entry leaves
+     // this store inconsistent with the one `/understand` Phase 7 writes for the
+     // same project. `hasStructuralAnalysis` is false because this path extracts
+     // with regex rather than tree-sitter, and core's comparator relies on that
+     // flag to degrade a comparison involving an unconfirmed entry to STRUCTURAL
+     // instead of trusting its signature.
+     all[filePath] = {
+       filePath,
+       contentHash,
+       functions,
+       classes,
+       imports,
+       exports,
+       totalLines: content.split('\n').length,
+       hasStructuralAnalysis: false,
+     };
    }
 
    // 3. GUARD against silent load failure: if fingerprints.json existed and was
    //    non-empty but `before` came out as 0, refuse to overwrite — something
    //    went wrong reading the file and writing now would clobber every entry.
    if (existedAndNonEmpty && before === 0) {
-     throw new Error('fingerprints.json existed and was non-empty but loaded as {} — refusing to overwrite');
+     throw new Error('fingerprints.json existed and was non-empty but its `files` map loaded as {} — refusing to overwrite');
    }
 
-   // 4. SAVE ALL entries back (full dict — not just the patched subset)
-   writeFileSync(fpPath, JSON.stringify(all, null, 2));
+   // 4. SAVE the whole store back (full `files` map — not just the patched
+   //    subset — with the sibling fields restated for the commit it now describes)
+   store.gitCommitHash = '<current commit hash>';
+   store.generatedAt = new Date().toISOString();
+   writeFileSync(fpPath, JSON.stringify(store, null, 2));
    console.log(`Fingerprints: ${before} → ${Object.keys(all).length}`);
    ```
 
-   The `existedAndNonEmpty && before === 0` guard catches the silent-load-failure case before it corrupts the store. If the count shrinks from N to a small number that matches the batch size, the LOAD step was skipped — abort the write rather than persist the wrong dict.
+   The `existedAndNonEmpty && before === 0` guard catches the silent-load-failure case before it corrupts the store. If the count shrinks from N to a small number that matches the batch size, the LOAD step was skipped — abort the write rather than persist the wrong store.
 
-4. Clean up intermediate files:
+3. Write updated metadata to `$UA_DIR/meta.json`:
+   ```json
+   {
+     "lastAnalyzedAt": "<ISO 8601 timestamp>",
+     "gitCommitHash": "<current commit hash>",
+     "version": "1.0.0",
+     "analyzedFiles": <number of entries in the `files` map saved by step 2>
+   }
+   ```
+
+   `analyzedFiles` counts fingerprint entries, not graph file nodes. That is the quantity `/understand` Phase 7 writes at baseline, and writing a different one here would make the field mean one thing before the first incremental update and another after it — the two values are then no longer comparable. This is why the fingerprint save runs first: its post-patch count is the value written here.
+
+4. Clean up this run's scratch directories, the same way `/understand` Phase 7 does — **preserving `scan-result.json`** so future incremental runs can skip Phase 1 SCAN (see issue #293), and `mv`ing rather than `rm -rf`ing so destructive-action gates on hardened hosts do not trip on just-created paths (see issue #301). The Phase 0 purge reclaims the space once the trash is older than 7 days.
+
+   `$UA_DIR/tmp` must go too: Phase 2's `file-analyzer` batches write `ua-file-analyzer-input-<N>.json` and `ua-file-extract-results-<N>.json` there, so a cleanup that only removes `intermediate/` leaves those behind to accumulate on every run.
+
    ```bash
-   INTERMEDIATE_DIR="$UA_DIR/intermediate"
-   if [ -n "$PROJECT_ROOT" ] && [ -d "$INTERMEDIATE_DIR" ]; then
-     rm -rf "$INTERMEDIATE_DIR"
+   TRASH="$UA_DIR/.trash-$(date +%s)"
+   mkdir -p "$TRASH"
+   INTER="$UA_DIR/intermediate"
+   if [ -d "$INTER" ]; then
+     # Move every entry except scan-result.json into the trash dir.
+     find "$INTER" -mindepth 1 -maxdepth 1 -not -name 'scan-result.json' -exec mv {} "$TRASH/" \; 2>/dev/null || true
    fi
+   mv "$UA_DIR/tmp" "$TRASH/" 2>/dev/null || true
    ```
 
 5. Report a summary:

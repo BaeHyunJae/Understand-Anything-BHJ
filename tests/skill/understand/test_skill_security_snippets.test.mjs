@@ -52,6 +52,60 @@ describe('skill command hardening', () => {
     );
   });
 
+  it('does not stamp metadata when the stored commit is unreachable', () => {
+    const content = readRepoFile(
+      'understand-anything-plugin/hooks/auto-update-prompt.md',
+    );
+
+    // An unreachable stored commit makes `git diff` exit non-zero with empty
+    // output, which reading the output alone cannot tell apart from "no changes".
+    expect(content).toMatch(/Check the exit status before reading the output/);
+    expect(content).toMatch(
+      /Non-zero exit:[\s\S]*Do \*\*not\*\* write `meta\.json`/,
+    );
+    expect(content).toMatch(/Exit 0 with no files changed/);
+  });
+
+  it('patches the fingerprint store under its files key, before writing meta', () => {
+    const content = readRepoFile(
+      'understand-anything-plugin/hooks/auto-update-prompt.md',
+    );
+
+    // The store is nested; patching its top level leaves the real map untouched.
+    expect(content).toMatch(/The store is NOT a flat path→fingerprint map/);
+    expect(content).toMatch(/const all = store\.files;/);
+    expect(content).toMatch(/writeFileSync\(fpPath, JSON\.stringify\(store, null, 2\)\)/);
+    expect(content).not.toMatch(/writeFileSync\(fpPath, JSON\.stringify\(all, null, 2\)\)/);
+
+    // Entries carry the whole FileFingerprint shape core declares.
+    expect(content).toMatch(/hasStructuralAnalysis: false/);
+    expect(content).toMatch(/totalLines: content\.split\('\\n'\)\.length/);
+
+    // meta.json is written after the fingerprint save, so analyzedFiles can quote it.
+    const fingerprintAt = content.indexOf('Update fingerprints (LOAD-PATCH-SAVE');
+    const metaAt = content.indexOf('Write updated metadata to `$UA_DIR/meta.json`');
+    expect(fingerprintAt).toBeGreaterThan(-1);
+    expect(metaAt).toBeGreaterThan(fingerprintAt);
+    expect(content).toMatch(/"analyzedFiles": <number of entries in the `files` map/);
+  });
+
+  it('sweeps tmp/ into the trash and purges it on a later run', () => {
+    const content = readRepoFile(
+      'understand-anything-plugin/hooks/auto-update-prompt.md',
+    );
+
+    // file-analyzer batches land in tmp/, so a cleanup that only takes
+    // intermediate/ leaves them to accumulate on every run.
+    expect(content).toMatch(/mv "\$UA_DIR\/tmp" "\$TRASH\/"/);
+    expect(content).toMatch(/-not -name 'scan-result\.json'/);
+    expect(content).not.toMatch(/rm -rf "\$INTERMEDIATE_DIR"/);
+
+    // Moving instead of deleting needs the delayed purge, or the trash grows forever.
+    expect(content).toMatch(
+      /find "\$UA_DIR\/" -maxdepth 1 -type d -name '\.trash-\*' -mtime \+7/,
+    );
+  });
+
   it('quotes dashboard cd targets and GRAPH_DIR assignment', () => {
     const content = readRepoFile('understand-anything-plugin/skills/understand-dashboard/SKILL.md');
 
