@@ -56,6 +56,8 @@ Invoke the bundled scan script. It walks the project (preferring `git ls-files`,
 
 If the dispatch prompt includes exclude patterns, append `--exclude "<patterns>"` to the invocation (patterns should be comma-separated; the script splits them internally).
 
+Always pass `--exclude-analysis-data`. The data directory holds this plugin's own output, and the freshness check and incremental updates already leave it out; scanning it would add the graph's own files to the graph.
+
 Resolve the project's data directory once (the legacy `.understand-anything/` when it already exists, otherwise the new `.ua/`) and reuse `$UA_DIR` for every path below:
 
 ```bash
@@ -63,7 +65,8 @@ UA_DIR="$PROJECT_ROOT/$([ -d "$PROJECT_ROOT/.understand-anything" ] && echo .und
 mkdir -p $UA_DIR/tmp
 node $PLUGIN_ROOT/skills/understand/scan-project.mjs \
   "$PROJECT_ROOT" \
-  "$UA_DIR/tmp/ua-scan-files.json"
+  "$UA_DIR/tmp/ua-scan-files.json" \
+  --exclude-analysis-data
 ```
 
 With exclude patterns (add the `--exclude` flag after the output path):
@@ -72,6 +75,7 @@ With exclude patterns (add the `--exclude` flag after the output path):
 node $PLUGIN_ROOT/skills/understand/scan-project.mjs \
   "$PROJECT_ROOT" \
   "$UA_DIR/tmp/ua-scan-files.json" \
+  --exclude-analysis-data \
   --exclude "tests/*,docs/*"
 ```
 

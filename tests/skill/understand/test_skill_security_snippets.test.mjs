@@ -49,6 +49,16 @@ describe('skill command hardening', () => {
     expect(content).toContain('Never update `meta.json` for a generated-artifact-only commit');
   });
 
+  it('keeps the analysis data directory out of the full scan', () => {
+    const content = readRepoFile('understand-anything-plugin/agents/project-scanner.md');
+    const invocations = content.match(/node \$PLUGIN_ROOT\/skills\/understand\/scan-project\.mjs[^`]*/g) ?? [];
+
+    expect(invocations.length).toBeGreaterThan(0);
+    for (const invocation of invocations) {
+      expect(invocation).toContain('--exclude-analysis-data');
+    }
+  });
+
   it('quotes dashboard cd targets and GRAPH_DIR assignment', () => {
     const content = readRepoFile('understand-anything-plugin/skills/understand-dashboard/SKILL.md');
 
