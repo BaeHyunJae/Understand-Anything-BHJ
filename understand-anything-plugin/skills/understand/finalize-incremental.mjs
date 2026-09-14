@@ -499,7 +499,10 @@ if (isCliEntry()) {
     await main();
   } catch (error) {
     process.stderr.write(`finalize-incremental.mjs failed: ${error.message}\n${error.stack}\n`);
-    process.exit(1);
+    // Set the code and let the process wind down instead of calling process.exit():
+    // on Windows with Node 24, exiting while the parser's async handles are still
+    // closing aborts with 0xC0000409 and replaces this exit code.
+    process.exitCode = 1;
   }
 }
 
